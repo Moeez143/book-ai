@@ -22,7 +22,11 @@ import {
   voiceCategories,
   voiceOptions,
 } from "@/lib/contants"
-import { cn } from "@/lib/utils"
+import { cn, parsePDFFile } from "@/lib/utils"
+import { useAuth } from "@clerk/nextjs"
+import {toast} from "sonner"
+import { checkBookExists } from "@/lib/actions/book.actions"
+import { useRouter } from "next/navigation"
 
 const fileSchema = z
   .custom<File>(
@@ -108,6 +112,9 @@ function FileName({ file, onRemove }: { file: File; onRemove: () => void }) {
 }
 
 function UploadForm() {
+  const {userId} = useAuth();
+  const router = useRouter();
+
   const form = useForm<UploadFormValues>({
     resolver: zodResolver(uploadFormSchema),
     defaultValues: {
@@ -125,12 +132,47 @@ function UploadForm() {
 
   const selectedVoiceName = voiceOptions[selectedVoice].name
 
-  async function onSubmit(values: UploadFormValues) {
-    await new Promise((resolve) => setTimeout(resolve, 900))
+  async function onSubmit(data: UploadFormValues) {
+    if(!userId) {
+      return toast.error("Please login first to upload the books.")
+    }
+
+    console.log("data ==>", data);
+
+    //PostHog -> Track Books Uploads
+
+    try {
+      // First check the exist of Book
+      const existsCheck = await checkBookExists(data.title);
+      if(existsCheck.exists && existsCheck.book) {
+        toast.info("Book with same title already exists.");
+        form.reset();
+        router.push(`/books/${existsCheck.book.slug}`);
+        return;
+      }
+
+
+      // Second create he book
+      const fileTitle = data.title.replace(/\s+/g, '-').toLowerCase();
+      const pdfFile = data.pdfFile;
+
+      const parsePDF = await parsePDFFile(pdfFile);
+
+      if(parsePDF.content.length === 0) {
+        toast.error("Failed to parse PDF. Please try again with different PDF file.");
+        return;
+      }
+      
+
+    } catch (error) {
+      console.log("Error While Submit the form", error);
+      toast.error("Failed to upload book. Please try again later.")
+    }
+
     console.info("Book upload form submitted", {
-      ...values,
-      pdfFile: values.pdfFile.name,
-      coverImage: values.coverImage?.name,
+      ...data,
+      pdfFile: data.pdfFile.name,
+      coverImage: data.coverImage?.name,
     })
   }
 
@@ -364,4 +406,4 @@ function UploadForm() {
   )
 }
 
-export default UploadForm
+export default UploadForm;
