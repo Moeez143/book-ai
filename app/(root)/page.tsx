@@ -1,15 +1,25 @@
 import BookCard from '@/components/BookCard'
 import HeroSection from '@/components/HeroSection'
-import { sampleBooks } from '@/lib/contants'
+import { getAllBooks } from '@/lib/actions/book.actions'
 
-export default function Page() {
+export default async function Page() {
+  const booksResult = await getAllBooks();
+
+  const books = booksResult.success ? booksResult.data ?? [] : []
+
   return (
-    <main className='wrapper container'>
+    <main className="wrapper container">
       <HeroSection />
 
-      <div className='library-books-grid'>
-        {sampleBooks.map((book) => (
-          <BookCard key={book._id} title={book.title} author={book.author} coverURL={book.coverURL} slug={book.slug} />
+      <div className="library-books-grid">
+        {books.map((book) => (
+          <BookCard
+            key={book._id}
+            title={book.title}
+            author={book.author}
+            coverURL={book.coverURL}
+            slug={book.slug}
+          />
         ))}
       </div>
     </main>
