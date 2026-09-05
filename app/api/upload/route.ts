@@ -4,9 +4,9 @@ import { auth } from "@clerk/nextjs/server";
 import { MAX_FILE_SIZE } from "@/lib/contants";
 
 export async function POST(request: Request): Promise<NextResponse> {
-  const body = (await request.json()) as HandleUploadBody;
-
   try {
+    const body = (await request.json()) as HandleUploadBody;
+    
     const jsonResponse = await handleUpload({
       token: process.env.BLOB_READ_WRITE_TOKEN,
       body,
@@ -31,14 +31,14 @@ export async function POST(request: Request): Promise<NextResponse> {
           tokenPayload: JSON.stringify({ userId }),
         };
       },
-      onUploadCompleted: async ({blob, tokenPayload}) => {
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
         console.log("Upload completed");
 
         const payload = tokenPayload ? JSON.parse(tokenPayload) : null;
         const userId = payload?.userId;
 
         // TODO: PostHog
-      }
+      },
     });
 
     return NextResponse.json(jsonResponse);
