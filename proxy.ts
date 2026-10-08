@@ -6,6 +6,8 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/__clerk(.*)",
+  // This webhook validates VAPI_WEBHOOK_SECRET in its route handler.
+  "/api/vapi/search-book",
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
