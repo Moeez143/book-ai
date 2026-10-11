@@ -6,6 +6,7 @@ import { escapeRegex, generateSlug, serializeData } from "@/lib/utils";
 import Book from "@/database/models/book.model";
 import BookSegment from "@/database/models/book-segment.model";
 import mongoose from "mongoose";
+import { revalidatePath } from "next/cache";
 
 export const getAllBooks = async () => {
   try {
@@ -147,6 +148,7 @@ export const saveBookSegments = async (
 
     await BookSegment.insertMany(segmentsToInsert);
     await Book.findByIdAndUpdate(bookId, { totalSegments: segments.length });
+    revalidatePath("/");
 
     console.log("Book Segments saved successfully");
 
