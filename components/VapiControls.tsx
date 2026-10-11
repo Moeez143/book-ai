@@ -40,6 +40,7 @@ function VapiControls({ book }: { book: IBook }) {
                             disabled={status === "connecting"}
                             className={`vapi-mic-btn shadow-md w-16! h-16! ${isActive ? "vapi-mic-btn-active" : "vapi-mic-btn-inactive"}`}
                             aria-label={isActive ? "Stop conversation" : "Start conversation"}
+                            title={isActive ? "Stop conversation" : "Start conversation"}
                         >
                             {isActive ? (
                                 <Mic className="h-6 w-6 text-[#212a3b]" />
