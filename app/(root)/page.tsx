@@ -15,10 +15,10 @@ export default async function Page() {
         {books.map((book) => (
           <BookCard
             key={book._id}
+            id={book._id}
             title={book.title}
             author={book.author}
             coverURL={book.coverURL}
-            slug={book.slug}
           />
         ))}
       </div>

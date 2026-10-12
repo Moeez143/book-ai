@@ -10,67 +10,73 @@ function errorDetails(error: unknown, depth = 0): string {
   if (typeof error === "string") return error.toLowerCase();
   if (typeof error !== "object") return "";
   const record = error as Record<string, unknown>;
-  return ["name", "message", "msg", "errorMsg", "type", "error", "cause", "endedReason"]
+  return ["name", "message", "msg", "errorMsg", "type", "code", "stage", "error", "cause", "endedReason"]
     .map((key) => errorDetails(record[key], depth + 1))
     .join(" ");
 }
 
 export function getVoiceErrorMessage(error: unknown): VoiceErrorMessage {
   const details = errorDetails(error);
-  if (/notallowederror|permissiondeniederror|securityerror|permissions|permission denied|not-allowed|customer-did-not-give-microphone-permission/.test(details)) {
+
+  if (/notallowederror|permissiondeniederror|permission denied|microphone permission|customer-did-not-give-microphone-permission/.test(details)) {
     return {
-      title: "Microphone access blocked",
-      description: "Allow microphone access in your browser's site settings and your system privacy settings, then try again. If you use a headset, check that its microphone is selected.",
+      title: "Microphone permission needed",
+      description: "Allow microphone access for this site in your browser settings, then try again.",
       priority: 3,
     };
   }
-  if (/notfounderror|devicesnotfounderror|not-found|overconstrainederror/.test(details)) {
+
+  if (/notfounderror|devicesnotfounderror|no microphone|microphone not found|overconstrainederror/.test(details)) {
     return {
       title: "No microphone detected",
-      description: "Connect a microphone or select your built-in microphone in system sound settings. If your headset is not detected, reconnect it or unplug it and try again.",
+      description: "Connect a microphone or choose an available input device, then try again.",
       priority: 3,
     };
   }
-  if (/notreadableerror|trackstarterror|aborterror|mic-in-use/.test(details)) {
+
+  if (/notreadableerror|trackstarterror|mic-in-use|microphone unavailable/.test(details)) {
     return {
       title: "Microphone unavailable",
-      description: "Close other apps using your microphone and check your system microphone permissions. Reconnect your headset, or unplug it to use the built-in microphone, then try again.",
+      description: "Another app may be using the microphone. Close it or reconnect your headset, then try again.",
       priority: 3,
     };
   }
+
   if (/microphone-unsupported|undefined-mediadevices/.test(details)) {
     return {
       title: "Microphone access unavailable",
-      description: "Open this site over HTTPS in a browser that supports microphone access, then try again.",
+      description: "Open this page in a browser that supports microphone access over HTTPS, then try again.",
       priority: 3,
     };
   }
-  if (/assistant-did-not-receive-customer-audio|daily-call-join-error|meeting has ended/.test(details)) {
+
+  if (/meeting has ended|ejected|daily-call-join-error|assistant-did-not-receive-customer-audio/.test(details)) {
     return {
-      title: "Voice connection ended",
-      description: "Check your microphone permissions, selected input, and internet connection. If you use a headset, reconnect it or try the built-in microphone, then start again.",
+      title: "Voice service ended the call",
+      description: "The call ended before it connected. Please try again in a moment. If this keeps happening, contact support.",
       priority: 2,
     };
   }
-  if (/network|connection/.test(details)) {
+
+  if (/timeout|timed out|network|connection|websocket/.test(details)) {
     return {
-      title: "Voice connection lost",
-      description: "Check your internet connection and try starting the conversation again.",
+      title: "Could not connect to the voice service",
+      description: "Check your internet connection and try again. If the problem continues, contact support.",
+      priority: 2,
+    };
+  }
+
+  if (/daily-error|vapi|server|api error|call.start.error|assistant-request/.test(details)) {
+    return {
+      title: "Voice service error",
+      description: "The voice service could not start the call. Please try again in a moment. If this keeps happening, contact support.",
       priority: 1,
     };
   }
+
   return {
-    title: "Unable to continue the conversation",
-    description: "Please try starting the conversation again. If the problem continues, check your microphone and headset settings.",
+    title: "Unable to start the voice session",
+    description: "Please try again in a moment. If this keeps happening, contact support.",
     priority: 0,
   };
-}
-
-export async function checkMicrophoneAccess(
-  mediaDevices: Pick<MediaDevices, "getUserMedia"> | undefined,
-): Promise<void> {
-  if (!mediaDevices?.getUserMedia) throw new Error("microphone-unsupported");
-  const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
-  // Release the test stream before Vapi opens its own audio connection.
-  stream.getTracks().forEach((track) => track.stop());
 }

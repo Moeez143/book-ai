@@ -2,9 +2,9 @@ import Link from 'next/link';
 import { BookCardProps } from '@/types';
 import Image from 'next/image';
 
-function BookCard({ title, author, coverURL, slug }: BookCardProps) {
+function BookCard({ id, title, author, coverURL }: BookCardProps) {
   return (
-    <Link href={`/books/${slug}`}>
+    <Link href={`/books/${id}`}>
       <article className='book-card'>
         <figure className='book-card-figure'>
           <div className="book-card-cover-wrapper">

@@ -75,10 +75,10 @@ export interface TextSegment {
 }
 
 export interface BookCardProps {
+  id: string;
   title: string;
   author: string;
   coverURL: string;
-  slug: string;
 }
 
 export interface Messages {
