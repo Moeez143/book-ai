@@ -6,9 +6,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Vapi from "@vapi-ai/web";
 import { useAuth } from "@clerk/nextjs";
 import { toast } from "sonner";
-import { checkMicrophoneAccess, getVoiceErrorMessage } from "@/lib/voice-errors";
+import { getVoiceErrorMessage } from "@/lib/voice-errors";
 
-import { ASSISTANT_ID, DEFAULT_VOICE, VOICE_SETTINGS } from "@/lib/contants";
+import { DEFAULT_VOICE, VOICE_SETTINGS } from "@/lib/contants";
 import { getVoice } from "@/lib/utils";
 import { IBook, Messages } from "@/types";
 import {
@@ -26,21 +26,57 @@ export function useLatestRef<T>(value: T) {
   return ref;
 }
 
-const VAPI_API_KEY = process.env.NEXT_PUBLIC_VAPI_KEY;
+type VapiConfig = { apiKey: string; assistantId: string };
+
 const TIMER_INTERVAL_MS = 1000;
 const VOICE_ERROR_TOAST_ID = "voice-session-error";
 
 let vapi: InstanceType<typeof Vapi>;
-function getVapi() {
-  if (!vapi) {
-    if (!VAPI_API_KEY) {
-      throw new Error(
-        "NEXT_PUBLIC_VAPI_KEY environment variable is not set",
-      );
-    }
-    vapi = new Vapi(VAPI_API_KEY);
+let vapiConfigPromise: Promise<VapiConfig> | null = null;
+let vapiPromise: Promise<InstanceType<typeof Vapi>> | null = null;
+
+function getVapiConfig() {
+  if (!vapiConfigPromise) {
+    vapiConfigPromise = fetch("/api/vapi/config")
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Unable to load voice assistant configuration");
+        }
+        return response.json() as Promise<VapiConfig>;
+      })
+      .catch((error: unknown) => {
+        vapiConfigPromise = null;
+        throw error;
+      });
   }
-  return vapi;
+  return vapiConfigPromise;
+}
+
+function getVapi() {
+  if (!vapiPromise) {
+    vapiPromise = getVapiConfig()
+      .then(({ apiKey }) => {
+        vapi = new Vapi(apiKey);
+        return vapi;
+      })
+      .catch((error: unknown) => {
+        vapiPromise = null;
+        throw error;
+      });
+  }
+  return vapiPromise;
+}
+
+function isNonFatalAudioProcessingError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+
+  const details = error as Record<string, unknown>;
+  const type = [details.type, details.stage].filter((value) => typeof value === "string").join(" ").toLowerCase();
+
+  return (
+    type.includes("audio-processing-setup") ||
+    type.includes("audio-processor-recovery")
+  );
 }
 
 export type CallStatus =
@@ -75,7 +111,8 @@ export function useVapi(book: IBook) {
   const voice = book.persona || DEFAULT_VOICE;
 
   const handleFailure = useCallback((error: unknown) => {
-    console.error("Voice session error:", error);
+    const feedback = getVoiceErrorMessage(error);
+    console.warn(feedback.title + ": " + feedback.description);
     setStatus("idle");
     setCurrentMessage("");
     setCurrentUserMessage("");
@@ -93,7 +130,6 @@ export function useVapi(book: IBook) {
     startTimeRef.current = null;
 
     // Keep the most useful error when the SDK reports the same failure repeatedly.
-    const feedback = getVoiceErrorMessage(error);
     if (feedback.priority <= errorPriorityRef.current) return;
     errorPriorityRef.current = feedback.priority;
     setLimitError(`${feedback.title}. ${feedback.description}`);
@@ -107,8 +143,8 @@ export function useVapi(book: IBook) {
 
   // Set up Vapi event listeners
   useEffect(() => {
-    if (!VAPI_API_KEY) return;
-    const client = getVapi();
+    let client: InstanceType<typeof Vapi> | null = null;
+    let mounted = true;
     const handlers = {
       "call-start": () => {
         isStoppingRef.current = false;
@@ -230,6 +266,9 @@ export function useVapi(book: IBook) {
       },
 
       error: (error: unknown) => {
+        // Vapi reports optional noise-cancellation failures through this event;
+        // audio processing can fail while the voice call itself still connects.
+        if (isNonFatalAudioProcessingError(error)) return;
         if (!isStoppingRef.current) handleFailure(error);
       },
       "camera-error": (error: unknown) => {
@@ -237,20 +276,28 @@ export function useVapi(book: IBook) {
         if (isStoppingRef.current) return;
         handleFailure(error);
         isStoppingRef.current = true;
-        void client.stop().catch((err) => console.error("Failed to stop call:", err));
+        void getVapi()
+          .then((vapiClient) => vapiClient.stop())
+          .catch((err) => console.error("Failed to stop call:", err));
       },
     };
 
-    // Register all handlers
-    Object.entries(handlers).forEach(([event, handler]) => {
-      client.on(event as keyof typeof handlers, handler as () => void);
-    });
+    void getVapi()
+      .then((vapiClient) => {
+        if (!mounted) return;
+        client = vapiClient;
+        Object.entries(handlers).forEach(([event, handler]) => {
+          vapiClient.on(event as keyof typeof handlers, handler as () => void);
+        });
+      })
+      .catch(handleFailure);
 
     return () => {
+      mounted = false;
       isStoppingRef.current = true;
       // End active session on unmount
       if (sessionIdRef.current) {
-        getVapi().stop();
+        client?.stop();
         endVoiceSession(sessionIdRef.current, durationRef.current).catch(
           (err) =>
             console.error("Failed to end voice session on unmount:", err),
@@ -258,9 +305,12 @@ export function useVapi(book: IBook) {
         sessionIdRef.current = null;
       }
       // Cleanup handlers
-      Object.entries(handlers).forEach(([event, handler]) => {
-        client.off(event as keyof typeof handlers, handler as () => void);
-      });
+      if (client) {
+        const activeClient = client;
+        Object.entries(handlers).forEach(([event, handler]) => {
+          activeClient.off(event as keyof typeof handlers, handler as () => void);
+        });
+      }
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [durationRef, handleFailure]);
@@ -283,8 +333,10 @@ export function useVapi(book: IBook) {
     setStatus("connecting");
 
     try {
-      const client = getVapi();
-      await checkMicrophoneAccess(navigator.mediaDevices);
+      const [client, { assistantId }] = await Promise.all([
+        getVapi(),
+        getVapiConfig(),
+      ]);
       if (isStoppingRef.current) return;
 
       // Check session limits and create session record
@@ -308,7 +360,7 @@ export function useVapi(book: IBook) {
 
       const firstMessage = `Hey, good to meet you. Quick question before we dive in - have you actually read ${book.title} yet, or are we starting fresh?`;
 
-      const call = await client.start(ASSISTANT_ID, {
+      const call = await client.start(assistantId, {
         firstMessage,
         variableValues: {
           title: book.title,
@@ -336,8 +388,10 @@ export function useVapi(book: IBook) {
 
   const stop = useCallback(() => {
     isStoppingRef.current = true;
-    getVapi().stop();
-  }, []);
+    void getVapi()
+      .then((client) => client.stop())
+      .catch(handleFailure);
+  }, [handleFailure]);
 
   const clearError = useCallback(() => {
     setLimitError(null);

@@ -59,6 +59,23 @@ export const getBookBySlug = async (slug: string) => {
   }
 };
 
+export const getBookById = async (id: string) => {
+  if (!mongoose.isValidObjectId(id)) {
+    return { success: false, message: "Book not found", data: null };
+  }
+  try {
+    await connectToDatabase();
+    const book = await Book.findById(id).lean();
+    if (!book) {
+      return { success: false, message: "Book not found", data: null };
+    }
+    return { success: true, message: "Book fetched successfully", data: serializeData(book) };
+  } catch (error) {
+    console.error("Error fetching book:", error);
+    return { success: false, message: "Failed to fetch book", data: null };
+  }
+};
+
 export const checkBookExists = async (title: string) => {
   try {
     await connectToDatabase();
