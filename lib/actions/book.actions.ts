@@ -7,6 +7,7 @@ import Book from "@/database/models/book.model";
 import BookSegment from "@/database/models/book-segment.model";
 import mongoose from "mongoose";
 import { revalidatePath } from "next/cache";
+import { getServerSubscription } from "@/lib/subscription";
 
 export const getAllBooks = async () => {
   try {
@@ -105,10 +106,42 @@ export const checkBookExists = async (title: string) => {
   }
 };
 
+export const checkBookUploadLimit = async () => {
+  try {
+    const { userId, plan, limits } = await getServerSubscription();
+    if (!userId) {
+      return { allowed: false, message: "Please sign in to add a book." };
+    }
+
+    await connectToDatabase();
+    const currentCount = await Book.countDocuments({ clerkId: userId });
+    const allowed = currentCount < limits.maxBooks;
+
+    return {
+      allowed,
+      limitReached: !allowed,
+      currentCount,
+      limit: limits.maxBooks,
+      plan,
+      message: allowed
+        ? ""
+        : "Your " + plan + " plan allows up to " + limits.maxBooks +
+          " books. View plans to add more.",
+    };
+  } catch (error) {
+    console.error("Error checking book limit:", error);
+    return { allowed: false, message: "Unable to check your book limit. Please try again." };
+  }
+};
+
 export const createBook = async (data: CreateBook) => {
   try {
-    await connectToDatabase();
+    const { userId, plan, limits } = await getServerSubscription();
+    if (!userId) {
+      return { success: false, message: "Please sign in to add a book." };
+    }
 
+    await connectToDatabase();
     const slug = generateSlug(data.title);
 
     //Checking if a book with the same slug already exists
@@ -123,9 +156,17 @@ export const createBook = async (data: CreateBook) => {
       };
     }
 
-    // Todo: Check the Subscription limits before creating a new book
+    const currentCount = await Book.countDocuments({ clerkId: userId });
+    if (currentCount >= limits.maxBooks) {
+      return {
+        success: false,
+        message: "Your " + plan + " plan allows up to " + limits.maxBooks +
+          " books. View plans to add more.",
+        limitReached: true,
+      };
+    }
 
-    const book = await Book.create({ ...data, slug, totalSegments: 0 });
+    const book = await Book.create({ ...data, clerkId: userId, slug, totalSegments: 0 });
 
     return {
       success: true,
@@ -145,16 +186,26 @@ export const createBook = async (data: CreateBook) => {
 
 export const saveBookSegments = async (
   bookId: string,
-  clerkId: string,
   segments: TextSegment[],
 ) => {
+  let verifiedUserId: string | null = null;
   try {
+    const { userId } = await getServerSubscription();
+    if (!userId) {
+      return { success: false, message: "Please sign in to save book segments." };
+    }
+
     await connectToDatabase();
+    const book = await Book.exists({ _id: bookId, clerkId: userId });
+    if (!book) {
+      return { success: false, message: "Book not found." };
+    }
+    verifiedUserId = userId;
     console.log("Saving Book Segments");
 
     const segmentsToInsert = segments.map(
       ({ text, segmentIndex, pageNumber, wordCount }) => ({
-        clerkId,
+        clerkId: userId,
         bookId,
         content: text,
         segmentIndex,
@@ -176,16 +227,14 @@ export const saveBookSegments = async (
     };
   } catch (error) {
     console.error("Error saving book segments:", error);
-    await BookSegment.deleteMany({ bookId });
-    await Book.findByIdAndDelete(bookId);
-    console.log(
-      "Deleted book segments and book due to failure to save segments.",
-    );
+    if (verifiedUserId) {
+      await BookSegment.deleteMany({ bookId, clerkId: verifiedUserId });
+      await Book.deleteOne({ _id: bookId, clerkId: verifiedUserId, totalSegments: 0 });
+    }
 
     return {
       success: false,
-      message:
-        "Failed to save book segments; rolled back and deleted book and segments",
+      message: "Failed to save book segments. Please try again later.",
       error,
     };
   }

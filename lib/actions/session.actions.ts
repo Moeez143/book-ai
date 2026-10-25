@@ -1,31 +1,69 @@
 "use server";
 
+import mongoose from "mongoose";
 import { connectToDatabase } from "@/database/mongoose";
-import { StartSessionResult } from "@/types";
+import Book from "@/database/models/book.model";
 import VoiceSession from "@/database/models/voice-session.model";
-import { getCurrentBillingPeriodStart } from "../subscription-contants";
+import { getServerSubscription } from "@/lib/subscription";
+import {
+  getCurrentBillingPeriodStart,
+  getNextBillingPeriodStart,
+} from "@/lib/subscription-constants";
+import type { StartSessionResult } from "@/types";
 
 export const startVoiceSession = async (
-  clerkId: string,
   bookId: string,
 ): Promise<StartSessionResult> => {
   try {
-    await connectToDatabase();
+    const { userId, plan, limits } = await getServerSubscription();
+    if (!userId) {
+      return { success: false, error: "Please sign in to start a voice session." };
+    }
+    if (!mongoose.isValidObjectId(bookId)) {
+      return { success: false, error: "Book not found." };
+    }
 
-    // Limit/Plan to see whether the user can start a new session or not.
+    await connectToDatabase();
+    const bookExists = await Book.exists({ _id: bookId });
+    if (!bookExists) {
+      return { success: false, error: "Book not found." };
+    }
+
+    const startedAt = new Date();
+    const billingPeriodStart = getCurrentBillingPeriodStart(startedAt);
+    const nextBillingPeriodStart = getNextBillingPeriodStart(startedAt);
+
+    if (limits.maxSessionsPerMonth !== null) {
+      const activeSessionCutoff = new Date(startedAt.getTime() - limits.maxSessionMinutes * 60_000);
+      const sessionCount = await VoiceSession.countDocuments({
+        clerkId: userId,
+        startedAt: { $gte: billingPeriodStart, $lt: nextBillingPeriodStart },
+        $or: [
+          { endedAt: null, startedAt: { $gte: activeSessionCutoff } },
+          { durationSeconds: { $gt: 0 } },
+        ],
+      });
+      if (sessionCount >= limits.maxSessionsPerMonth) {
+        return {
+          success: false,
+          error: "Your " + plan + " plan includes " + limits.maxSessionsPerMonth +
+            " voice sessions per month. View plans to continue.",
+        };
+      }
+    }
 
     const session = await VoiceSession.create({
-      clerkId,
+      clerkId: userId,
       bookId,
-      startedAt: new Date(),
-      billingPeriodStart: getCurrentBillingPeriodStart(),
-      durationSeconds: 0, // Initialize duration to 0
+      startedAt,
+      billingPeriodStart,
+      durationSeconds: 0,
     });
 
     return {
       success: true,
       sessionId: session._id.toString(),
-      // maxDurationMinutes: check.maxDurationMinutes
+      maxDurationMinutes: limits.maxSessionMinutes,
     };
   } catch (error) {
     console.error("Error starting voice session:", error);
@@ -41,22 +79,26 @@ export const endVoiceSession = async (
   durationSeconds: number,
 ): Promise<{ success: boolean; error?: string }> => {
   try {
-    await connectToDatabase();
+    const { userId } = await getServerSubscription();
+    if (!userId) {
+      return { success: false, error: "Please sign in to end the voice session." };
+    }
+    if (!mongoose.isValidObjectId(sessionId)) {
+      return { success: false, error: "Voice session not found." };
+    }
 
-    const session = await VoiceSession.findByIdAndUpdate(
-      sessionId,
-      {
-        endedAt: new Date(),
-        durationSeconds,
-      },
+    await connectToDatabase();
+    const safeDuration = Number.isFinite(durationSeconds)
+      ? Math.max(0, Math.floor(durationSeconds))
+      : 0;
+    const session = await VoiceSession.findOneAndUpdate(
+      { _id: sessionId, clerkId: userId },
+      { endedAt: new Date(), durationSeconds: safeDuration },
       { new: true },
     );
 
     if (!session) {
-      return {
-        success: false,
-        error: "Voice session not found.",
-      };
+      return { success: false, error: "Voice session not found." };
     }
 
     return { success: true };
@@ -66,5 +108,39 @@ export const endVoiceSession = async (
       success: false,
       error: "Failed to end voice session. Please try again later.",
     };
+  }
+};
+
+export const getVoiceSessionHistory = async (bookId: string) => {
+  try {
+    const { userId, limits } = await getServerSubscription();
+    if (!userId) {
+      return { allowed: false, sessions: [], error: "Please sign in to view session history." };
+    }
+    if (!limits.hasSessionHistory) {
+      return { allowed: false, sessions: [] };
+    }
+    if (!mongoose.isValidObjectId(bookId)) {
+      return { allowed: true, sessions: [], error: "Book not found." };
+    }
+
+    await connectToDatabase();
+    const sessions = await VoiceSession.find({ clerkId: userId, bookId })
+      .select("startedAt durationSeconds")
+      .sort({ startedAt: -1 })
+      .limit(20)
+      .lean();
+
+    return {
+      allowed: true,
+      sessions: sessions.map((session) => ({
+        id: session._id.toString(),
+        startedAt: session.startedAt.toISOString(),
+        durationSeconds: session.durationSeconds,
+      })),
+    };
+  } catch (error) {
+    console.error("Error fetching voice session history:", error);
+    return { allowed: true, sessions: [], error: "Unable to load session history." };
   }
 };

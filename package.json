@@ -10,8 +10,9 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.7",
+    "@clerk/ui": "1.41.2",
     "@hookform/resolvers": "^5.4.0",
-    "@vapi-ai/web": "^2.7.1",
+    "@vapi-ai/web": "3.0.1",
     "@vercel/blob": "^2.8.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -6,17 +6,19 @@ import Image from "next/image";
 import { IBook } from "@/types";
 import useVapi from '@/hooks/useVapi';
 import Transcript from "@/components/Transcript";
+import { formatDuration } from "@/lib/utils";
 
-function VapiControls({ book }: { book: IBook }) {
+function VapiControls({ book, initialMaxDurationMinutes }: { book: IBook; initialMaxDurationMinutes: number }) {
     const { status,
         isActive,
         messages,
         currentMessage,
         currentUserMessage,
         duration,
+        maxDurationSeconds,
         limitError,
         start,
-        stop } = useVapi(book);
+        stop } = useVapi(book, initialMaxDurationMinutes);
 
     return (
         <div className="vapi-main-container">
@@ -59,14 +61,16 @@ function VapiControls({ book }: { book: IBook }) {
 
                     <div className="mt-4 flex flex-wrap items-center gap-2">
                         <span className="vapi-status-indicator">
-                            <span className="vapi-status-dot vapi-status-dot-ready" />
-                            <span className="vapi-status-text">Ready</span>
+                            <span className={`vapi-status-dot vapi-status-dot-${status === "idle" ? "ready" : status === "starting" ? "connecting" : status}`} aria-hidden="true" />
+                            <span className="vapi-status-text" role="status">
+                                {status === "idle" ? "Ready" : status === "connecting" ? "Connecting..." : status === "starting" ? "Starting..." : status.charAt(0).toUpperCase() + status.slice(1)}
+                            </span>
                         </span>
                         <span className="vapi-badge-ai">
                             <span className="vapi-badge-ai-text">Voice: {book.persona || "Default"}</span>
                         </span>
                         <span className="vapi-badge-ai">
-                            <span className="vapi-badge-ai-text">0:00/15:00</span>
+                            <span className="vapi-badge-ai-text">{formatDuration(duration)}/{formatDuration(maxDurationSeconds)}</span>
                         </span>
                     </div>
                 </div>

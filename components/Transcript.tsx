@@ -11,11 +11,15 @@ interface TranscriptProps {
 }
 
 function Transcript({ messages, currentMessage, currentUserMessage }: TranscriptProps) {
-    const bottomRef = useRef<HTMLDivElement>(null);
+    const messagesRef = useRef<HTMLDivElement>(null);
+    const shouldAutoScrollRef = useRef(true);
     const hasConversation = messages.length > 0 || Boolean(currentMessage || currentUserMessage);
 
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+        const container = messagesRef.current;
+        if (container && shouldAutoScrollRef.current) {
+            container.scrollTop = container.scrollHeight;
+        }
     }, [messages, currentMessage, currentUserMessage]);
 
     if (!hasConversation) {
@@ -32,7 +36,16 @@ function Transcript({ messages, currentMessage, currentUserMessage }: Transcript
 
     return (
         <div className="transcript-container">
-            <div className="transcript-messages" aria-live="polite">
+            <div
+                className="transcript-messages"
+                aria-live="polite"
+                ref={messagesRef}
+                onScroll={(event) => {
+                    const container = event.currentTarget;
+                    shouldAutoScrollRef.current =
+                        container.scrollHeight - container.scrollTop - container.clientHeight < 48;
+                }}
+            >
                 {messages.map((item, index) => {
                     const isUser = item.role === "user";
 
@@ -68,7 +81,6 @@ function Transcript({ messages, currentMessage, currentUserMessage }: Transcript
                     </div>
                 )}
 
-                <div ref={bottomRef} aria-hidden="true" />
             </div>
         </div>
     );

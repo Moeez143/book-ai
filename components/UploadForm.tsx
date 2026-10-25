@@ -17,17 +17,17 @@ import {
 import {
   ACCEPTED_IMAGE_TYPES,
   ACCEPTED_PDF_TYPES,
-  DEFAULT_VOICE,
   MAX_FILE_SIZE,
   voiceCategories,
   voiceOptions,
 } from "@/lib/contants"
 import { cn, parsePDFFile } from "@/lib/utils"
-import { useAuth } from "@clerk/nextjs"
 import { toast } from "sonner"
-import { checkBookExists, createBook, saveBookSegments } from "@/lib/actions/book.actions"
+import { checkBookExists, checkBookUploadLimit, createBook, saveBookSegments } from "@/lib/actions/book.actions"
 import { useRouter } from "next/navigation"
 import { upload } from "@vercel/blob/client"
+import Link from "next/link"
+import { useSubscription } from "@/hooks/useSubscription"
 
 const fileSchema = z
   .custom<File>(
@@ -113,7 +113,7 @@ function FileName({ file, onRemove }: { file: File; onRemove: () => void }) {
 }
 
 function UploadForm() {
-  const { userId } = useAuth();
+  const { isSignedIn, plan, limits } = useSubscription();
   const router = useRouter();
 
   const form = useForm<UploadFormValues>({
@@ -135,7 +135,7 @@ function UploadForm() {
   const selectedPersonaName = selectedPersona ? voiceOptions[selectedPersona].name : ""
 
   async function onSubmit(data: UploadFormValues) {
-    if (!userId) {
+    if (!isSignedIn) {
       return toast.error("Please login first to upload the books.")
     }
 
@@ -153,6 +153,17 @@ function UploadForm() {
         return;
       }
 
+
+      const availability = await checkBookUploadLimit();
+      if (!availability.allowed) {
+        if (availability.limitReached) {
+          toast.error(availability.message || "You've reached your book limit.");
+          router.push("/subscriptions");
+        } else {
+          toast.error(availability.message || "Unable to check your book limit. Please try again.");
+        }
+        return;
+      }
 
       // Second create the book
       const fileTitle = data.title.replace(/\s+/g, '-').toLowerCase();
@@ -193,7 +204,6 @@ function UploadForm() {
       }
 
       const book = await createBook({
-        clerkId: userId,
         title: data.title,
         author: data.author,
         persona: data.persona,
@@ -203,7 +213,15 @@ function UploadForm() {
         fileSize: pdfFile.size,
       });
 
-      if (!book.success) throw new Error("Failed to create book. Please try again later.");
+      if (!book.success) {
+        if (book.limitReached) {
+          toast.error(book.message || "You've reached your book limit.");
+          router.push("/subscriptions");
+        } else {
+          toast.error(book.message || "Failed to create book. Please try again later.");
+        }
+        return;
+      }
 
       if (book.alreadyExists) {
         toast.info("Book with same title already exists.");
@@ -212,11 +230,10 @@ function UploadForm() {
         return;
       }
 
-      const segments = await saveBookSegments(book.data._id, userId, parsePDF.content);
+      const segments = await saveBookSegments(book.data._id, parsePDF.content);
 
       if (!segments.success) {
-        toast.error("Failed to save book segments. Please try again later.");
-        throw new Error("Failed to save book segments. Please try again later.");
+        throw new Error(segments.message || "Failed to save book segments. Please try again later.");
       }
 
       toast.success("Book uploaded successfully!");
@@ -224,8 +241,10 @@ function UploadForm() {
       router.push(`/`);
 
     } catch (error) {
-      console.log("Error While Submit the form", error);
-      toast.error("Failed to upload book. Please try again later.")
+      console.error("Error while uploading book:", error);
+      toast.error(error instanceof Error && error.message.trim()
+        ? error.message
+        : "Failed to upload book. Please try again later.");
     }
 
     console.info("Book upload form submitted", {
@@ -239,9 +258,10 @@ function UploadForm() {
     <div className="new-book-wrapper">
       {isSubmitting && <LoadingOverlay />}
 
-      {/* <p className="text-sm font-medium text-[#3d485e]">
-        5 of 10 books used (Upgrade)
-      </p> */}
+      <p className="text-sm font-medium text-[#3d485e]">
+        Your {plan} plan includes up to {limits.maxBooks} books.{" "}
+        <Link href="/subscriptions" className="font-semibold underline">View plans</Link>
+      </p>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">

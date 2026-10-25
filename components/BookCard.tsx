@@ -8,7 +8,7 @@ function BookCard({ id, title, author, coverURL }: BookCardProps) {
       <article className='book-card'>
         <figure className='book-card-figure'>
           <div className="book-card-cover-wrapper">
-            <Image src={coverURL} alt={`${title} cover`} width={133} height={200} className='book-card-cover' />
+            <Image src={coverURL} alt={`${title} cover`} width={133} height={200} unoptimized className='book-card-cover' />
           </div>
         </figure>
 
