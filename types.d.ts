@@ -117,12 +117,19 @@ export interface FileUploadFieldProps<T extends FieldValues> {
   hint: string;
 }
 
-export interface StartSessionResult {
-  success: boolean;
-  sessionId?: string;
-  maxDurationMinutes?: number;
-  error?: string;
-}
+export type StartSessionResult =
+  | {
+      success: true;
+      sessionId: string;
+      maxDurationMinutes: number;
+      error?: never;
+    }
+  | {
+      success: false;
+      error: string;
+      sessionId?: never;
+      maxDurationMinutes?: never;
+    };
 
 export interface SessionCheckResult {
   allowed: boolean;
