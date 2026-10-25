@@ -1,7 +1,7 @@
 "use client"
 
 import { SignInButton, useAuth } from "@clerk/nextjs"
-import { LoaderCircle } from "lucide-react"
+import { UploadFormSkeleton } from "@/components/LoadingSkeletons"
 
 import UploadForm from "@/components/UploadForm"
 
@@ -9,11 +9,7 @@ function BookUploadAuthGate() {
   const { isLoaded, isSignedIn } = useAuth()
 
   if (!isLoaded) {
-    return (
-      <div className="new-book-wrapper flex min-h-[320px] items-center justify-center">
-        <LoaderCircle className="h-8 w-8 animate-spin text-[#663820]" />
-      </div>
-    )
+    return <UploadFormSkeleton />
   }
 
   if (!isSignedIn) {

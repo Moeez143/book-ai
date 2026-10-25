@@ -8,6 +8,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { getVoiceErrorMessage } from "@/lib/voice-errors";
+import { joinAssistantTranscript } from "@/lib/voice-transcript";
 
 import { DEFAULT_VOICE, VOICE_SETTINGS } from "@/lib/contants";
 import { getVoice } from "@/lib/utils";
@@ -322,14 +323,18 @@ export function useVapi(book: IBook, initialMaxDurationMinutes: number) {
           if (message.role === "assistant") setCurrentMessage("");
           if (message.role === "user") setCurrentUserMessage("");
 
+          const transcript = message.transcript.trim();
+          if (!transcript) return;
+
           setMessages((prev) => {
-            const isDupe = prev.some(
-              (m) =>
-                m.role === message.role && m.content === message.transcript,
-            );
-            return isDupe
-              ? prev
-              : [...prev, { role: message.role, content: message.transcript }];
+            const last = prev[prev.length - 1];
+            if (message.role === "assistant" && last?.role === "assistant") {
+              const content = joinAssistantTranscript(last.content, transcript);
+              if (content === last.content) return prev;
+              return [...prev.slice(0, -1), { ...last, content }];
+            }
+            if (last?.role === message.role && last.content === transcript) return prev;
+            return [...prev, { role: message.role, content: transcript }];
           });
         }
       },
