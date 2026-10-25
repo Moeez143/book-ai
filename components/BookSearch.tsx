@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-export default function BookSearch({ initialQuery }: { initialQuery: string }) {
+export default function BookSearch({
+  initialQuery,
+  children,
+}: {
+  initialQuery: string;
+  children: ReactNode;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState(initialQuery);
+  const isSearching = query.trim() !== initialQuery;
 
   useEffect(() => {
     const syncFromUrl = () => {
@@ -31,16 +38,26 @@ export default function BookSearch({ initialQuery }: { initialQuery: string }) {
   }, [query, router]);
 
   return (
-    <div className="library-search-wrapper">
-      <Search className="ml-3 size-5 shrink-0 text-(--text-secondary)" aria-hidden="true" />
-      <input
-        type="search"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder="Search by title or author"
-        aria-label="Search books by title or author"
-        className="library-search-input min-w-0"
-      />
-    </div>
+    <>
+      <div className="library-filter-bar">
+        <h2 className="text-2xl font-semibold text-(--text-primary)">Recent Books</h2>
+        <div className="library-search-wrapper">
+          <Search className="ml-3 size-5 shrink-0 text-(--text-secondary)" aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by title or author"
+            aria-label="Search books by title or author"
+            className="library-search-input min-w-0"
+          />
+        </div>
+      </div>
+      {isSearching ? (
+        <p className="library-empty-card text-center text-(--text-secondary)" role="status">
+          Searching...
+        </p>
+      ) : children}
+    </>
   );
 }
