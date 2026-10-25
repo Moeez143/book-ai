@@ -425,8 +425,19 @@ export function useVapi(book: IBook, initialMaxDurationMinutes: number) {
         return;
       }
 
+      const confirmedMaxDurationMinutes = result.maxDurationMinutes;
+      if (
+        typeof confirmedMaxDurationMinutes !== "number" ||
+        !Number.isFinite(confirmedMaxDurationMinutes) ||
+        confirmedMaxDurationMinutes <= 0
+      ) {
+        if (result.sessionId) await endVoiceSession(result.sessionId, 0);
+        handleFailure(new Error("Unable to confirm this session's time limit. Please try again."));
+        return;
+      }
+
       sessionIdRef.current = result.sessionId || null;
-      maxDurationRef.current = (result.maxDurationMinutes ?? initialMaxDurationMinutes) * 60;
+      maxDurationRef.current = confirmedMaxDurationMinutes * 60;
       setServerMaxDurationSeconds(maxDurationRef.current);
 
       const firstMessage = `Hey, good to meet you. Quick question before we dive in - have you actually read ${book.title} yet, or are we starting fresh?`;

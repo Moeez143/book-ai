@@ -9,11 +9,16 @@ import mongoose from "mongoose";
 import { revalidatePath } from "next/cache";
 import { getServerSubscription } from "@/lib/subscription";
 
-export const getAllBooks = async () => {
+export const getAllBooks = async (searchQuery = "") => {
   try {
     await connectToDatabase();
 
-    const books = await Book.find().sort({ createdAt: -1 }).lean();
+    const query = searchQuery.trim();
+    const searchPattern = query ? new RegExp(escapeRegex(query), "i") : null;
+    const filter = searchPattern
+      ? { $or: [{ title: searchPattern }, { author: searchPattern }] }
+      : {};
+    const books = await Book.find(filter).sort({ createdAt: -1 }).lean();
 
     return {
       success: true,
