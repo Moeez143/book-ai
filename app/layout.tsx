@@ -1,4 +1,5 @@
 import {ClerkProvider} from "@clerk/nextjs";
+import { ui } from "@clerk/ui";
 import type { Metadata } from "next";
 import { IBM_Plex_Serif, Mona_Sans } from "next/font/google";
 
@@ -37,7 +38,7 @@ export default function RootLayout({
         className={`min-h-full flex flex-col ${ibmPlexSerif.variable} ${monaSans.variable} h-full antialiased`}
         cz-shortcut-listen="true"
       >
-        <ClerkProvider dynamic>
+        <ClerkProvider dynamic ui={ui}>
           <Navbar />
           {children}
           <Toaster/>

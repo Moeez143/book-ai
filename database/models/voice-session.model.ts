@@ -15,6 +15,7 @@ const VoiceSessionSchema = new Schema<IVoiceSession>(
 );
 
 VoiceSessionSchema.index({ clerkId: 1, billingPeriodStart: 1 });
+VoiceSessionSchema.index({ clerkId: 1, startedAt: 1 });
 
 const VoiceSession =
   models.VoiceSession || model<IVoiceSession>("VoiceSession", VoiceSessionSchema);

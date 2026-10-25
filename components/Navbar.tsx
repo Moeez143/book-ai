@@ -8,6 +8,7 @@ import { SignInButton, UserButton, Show, useUser } from "@clerk/nextjs";
 const navItems = [
   { label: "Library", href: "/" },
   { label: "Add New", href: "/books/new" },
+  { label: "Pricing", href: "/subscriptions" },
 ];
 
 function Navbar() {
@@ -18,12 +19,12 @@ function Navbar() {
     <header className="w-full fixed z-50 bg-(--bg-primary)">
       <div className="wrapper navbar-height py-4 flex justify-between items-center">
         <Link href="/" className="flex gap-0.5 items-center">
-          <Image src="/assets/logo.png" alt="bookified" width={42} height={26} />
+          <Image src="/assets/logo.png" alt="bookified" width={43} height={26} />
           <span className="logo-text">Bookified</span>
         </Link>
 
         {/* Navbar */}
-        <nav className="w-fit flex gap-7.5 items-center">
+        <nav className="flex min-w-0 items-center gap-2 sm:gap-7.5">
           {navItems.map(({ label, href }) => {
             const isActive = pathName === href || (href !== '/' && pathName.startsWith(href))
 
@@ -34,7 +35,7 @@ function Navbar() {
             )
           })}
 
-          <div className="flex items-center gap-7.5">
+          <div className="flex items-center gap-2 sm:gap-7.5">
             <Show when="signed-out">
               <SignInButton mode="modal" />
             </Show>
