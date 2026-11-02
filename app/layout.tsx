@@ -38,7 +38,7 @@ export default function RootLayout({
         className={`min-h-full flex flex-col ${ibmPlexSerif.variable} ${monaSans.variable} h-full antialiased`}
         cz-shortcut-listen="true"
       >
-        <ClerkProvider dynamic ui={ui}>
+        <ClerkProvider dynamic ui={ui} publishableKey={process.env.CLERK_PUBLISHABLE_KEY}>
           <Navbar />
           {children}
           <Toaster/>
